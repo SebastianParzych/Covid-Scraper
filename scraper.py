@@ -1,9 +1,12 @@
 #--------------------------------- DATA SCRAPPER------------------------------------#
 import requests
 import pandas as pd
-import json
 from bs4 import BeautifulSoup
 import os
+
+
+list_of_folders=["data","data/csv_format"]
+
 
 class Corona:
     def __init__(self):
@@ -15,20 +18,40 @@ class Corona:
         self.all_titles=[]
         self.exist= None
         self.csv_file_name =''
-        self. loop = True;
         self.df=pd.DataFrame()
-    def request (self): # requests page resources
-        url = "https://www.worldometers.info/coronavirus/country/" + self.country + "/"
+    def reset(self): # reseting class variables while getting data from all countries
+        self.country =None
+        self.columns=0
+        self.soup=None
+        self.error_data=None
+        self.all_titles=[]
+        self.exist= None
+        self.csv_file_name =''
+        self.df=pd.DataFrame()
 
-        page=requests.get(url)
+    def run(self):
+        if self.country == None:
+            for country in self.all_countries.values():
+                try:
+                    self.request(country)
+                    self.reset()
+                except:
+                    continue
+        else:
+            self.request(self.country)
+
+    def request (self, country ): # requests page resources
+        print(country)
+        self.files_management(country)
+        url = "https://www.worldometers.info/coronavirus/country/" + country + "/"
+        page = requests.get(url)
         self.soup = BeautifulSoup(page.text, 'html.parser')
         all_scripts = self.soup.find_all('script')
-        for script in all_scripts  :
-            if not self.loop:
-                break;
-            if 'Highcharts.chart' in str(script): #excract data only from script ,that contain chart
+        for script in all_scripts:
+            if 'Highcharts.chart' in str(script):  # excract data only from script ,that contain chart
                 self.minedata(str(script), self.columns)
         self.csv_writer()  # making .csv file
+
     def title_formatting(self, script):
         tittle=script.split('name:',1)[1]
         tittle=tittle.split('\n',1)[0]
@@ -135,14 +158,26 @@ class Corona:
                            index=True,
                            index_label='Days',
                            float_format="%.3f")
+    def data_pad (self, dict,dataFrame):
+        if not dataFrame.empty  and len(dict)< len(dataFrame['Date']): # Some data has not the same length, here is padding empty values
+            pad = {}
+            for date in dataFrame['Date']:
+                if not  date in dict:
+                  pad[date]='-'
+            pad.update(dict)
+            return pad
+        else:
+            return dict
 
     def data_Frame(self, dict):# making, updating, database.
         columns = self.columns - 1
         if  self.exist:
+            dict=self.data_pad(dict, self.temp)
             self.temp['Date'] = dict.keys()
             self.temp[self.all_titles[columns]] = dict.values()
             self.temp.index=pd.RangeIndex(start= len(self.df['Days']), stop= len(self.df['Days'])+len(dict))
         elif not self.exist  or  self.error_data ==  True:
+                dict=self.data_pad(dict,self.df)
                 self.df['Date'] = dict.keys()
                 self.df[str(columns)+'_'+ self.all_titles[columns]] = dict.values()
 
@@ -165,24 +200,26 @@ class Corona:
                 number= number +1
                 temp.append(val)
                 all_countries [number]=val
-
         return all_countries
 
     def country_pick (self):
         pol=0
         for key in self.all_countries:
             print(str(key)+'     '+self.all_countries[key])
-            if self.all_countries[key]=='poland':
+            if self.all_countries[key]=='china':
                 pol=key
         print("Type the number from the above list to get the data of a given country")
-        print('Example:'+ str(pol)+ ' ->  Extracting all data about ' + str(self.all_countries[pol]))
+        print('Example:' + str(pol) + ' ->  Extracting all data about ' + str(self.all_countries[pol]))
         print('Your number:')
         nr = input ()
         country=self.all_countries.get(int(nr))
         self.country=country
-        if not os.path.isdir('./data'):
-            os.makedirs('data')
-        self.csv_file_name ='data/'+self.country + '_data_storage.csv'  # name of csv file
+        self.files_management(country)
+    def files_management(self, country):
+        for folder in list_of_folders:
+            if not os.path.isdir(folder):
+                os.makedirs(folder)
+        self.csv_file_name = 'data/csv_format/' + country + '_data_storage.csv'  # name of csv file
         try:
             self.df = pd.read_csv(self.csv_file_name, sep=';', index_col=None)
             self.temp = pd.DataFrame()
@@ -193,10 +230,13 @@ class Corona:
             self.df.to_csv(self.csv_file_name)
             self.exist = False
 
-def runScript( ): # General purpose, excract all data sets about chosen country
+def one_country( ): # General purpose, excract all data sets about chosen country
     scrape = Corona()
     scrape.country_pick()
-    scrape.request()
+    scrape.run()
+def pull_alldata(): # Extract data from all countries.
+    scrape = Corona()
+    scrape.run()
 
-
-runScript()
+#one_country()
+pull_alldata()
